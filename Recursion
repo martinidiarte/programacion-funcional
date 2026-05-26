@@ -1,0 +1,154 @@
+import Prelude hiding (length,map,filter,sum,concat,reverse,(++))
+
+-- Funciones sobre enteros
+
+{- factorial -}
+
+factorial n = product [1..n]
+
+fact :: Integer -> Integer
+fact n
+  | n == 0  = 1
+  | n > 0   = n * fact (n - 1)
+
+fact1 n
+  | n == 0     = 1
+  | otherwise  = n * fact1 (n - 1)
+
+fact2 0  = 1
+fact2 n  = n * fact2 (n-1)
+
+fact3 n = factacc 1 n 
+  where
+    factacc a 0 = a
+    factacc a n = factacc (a*n) (n-1) 
+
+{- recursion estructural -}
+
+pot2 :: Integer -> Integer
+pot2  0  = 1
+pot2  n  = 2 * pot2 (n-1)
+
+sumF :: (Integer -> Integer) -> Integer -> Integer
+sumF f 0 = f 0
+sumF f n = f n + sumF f (n-1)
+
+mult :: Integer -> Integer -> Integer
+mult m 0  = 0
+mult m n  = m + mult m (n-1)
+
+{- recursion general -}
+
+fib :: Integer -> Integer
+fib  0  = 0
+fib  1  = 1
+fib  n  = fib (n-1) + fib (n-2)
+
+-- polinomios de Hermite
+he 0 x  = 1
+he 1 x  = 2 * x
+he n x  = 2 * x * he (n-1) x - 2 * (n-1) * he (n-2) x
+
+division :: Integer -> Integer -> Integer
+division m n
+   | m < n      = 0
+   | otherwise  = 1 + division (m-n) n
+
+resto :: Integer -> Integer -> Integer
+resto m n
+   | m < n      = m
+   | otherwise  = resto (m-n) n
+
+mcd :: Integer -> Integer -> Integer
+mcd m n 
+    | m == n  = m
+    | m > n   = mcd (m-n) n
+    | m < n   = mcd m (n-m)
+
+fastmcd :: Integer -> Integer -> Integer
+fastmcd m 0  = m
+fastmcd m n  = fastmcd n (m `mod` n)      
+
+mcCarthy91 :: Integer -> Integer
+mcCarthy91 n  | n <= 100  = mcCarthy91 (mcCarthy91 (n+11))
+              | n > 100   = n - 10
+
+{- recursion mutua -}
+
+par :: Integer -> Bool
+par 0  = True
+par n  = impar (n-1)
+
+impar :: Integer -> Bool
+impar 0  = False
+impar n  = par (n-1)
+
+-- Funciones sobre listas
+
+{- insertion sort -}
+
+isort :: Ord a => [a] -> [a]
+isort []      = []
+isort (x:xs)  = insert x (isort xs)
+
+insert :: Ord a => a -> [a] -> [a]
+insert x []                  = [x]
+insert x (y:ys) | x <= y     = x : y : ys
+                | otherwise  = y : insert x ys
+
+
+{- foldr -}
+
+sum :: Num a => [a] -> a
+sum = foldr (+) 0
+
+length :: [a] -> Int
+length = foldr (\_ -> \r -> 1 + r) 0
+
+all :: (a -> Bool) -> [a] -> Bool
+all p = foldr (\x -> \r -> p x && r) True
+
+concat :: [[a]] -> [a]
+concat = foldr (++) []
+
+reverse :: [a] -> [a]
+reverse = foldr snoc []
+  where snoc x ys = ys ++ [x]
+
+(++) :: [a] -> [a] -> [a]
+xs ++ ys = foldr (:) ys xs 
+
+map :: (a -> b) -> [a] -> [b]
+map f = foldr ((:) . f) []
+
+filter :: (a -> Bool) -> [a] -> [a]
+filter p = foldr fil []
+  where fil x r | p x       = x : r
+                | otherwise = r
+
+isort' :: Ord a => [a] -> [a]
+isort' = foldr insert []
+
+{- foldl -}
+
+sum1 = sumacc 0
+  where sumacc s []      = s 
+        sumacc s (x:xs)  = sumacc (s + x) xs
+
+sum1' :: Num a => [a] -> a
+sum1' = foldl (+) 0
+
+fastrev = revacc []
+  where revacc r []      = r 
+        revacc r (x:xs)  = revacc (x : r) xs
+
+fastrev' :: [a] -> [a]
+fastrev' = foldl (flip (:)) []
+
+{- quicksort -}
+
+qsort :: Ord a => [a] -> [a]
+qsort [] = []
+qsort (x:xs) =  qsort leq_x ++ [x] ++ qsort gt_x
+  where  leq_x  = [y | y <- xs, y <= x]
+         gt_x   = [y | y <- xs, y > x]  

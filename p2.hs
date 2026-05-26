@@ -1,3 +1,4 @@
+import GHC.Generics (prec)
 --Practico 2----------------------------------------------------------
 ---------------------------Ejercicio 1---------------------------------
 --Dada la siguiente funci´on
@@ -57,8 +58,8 @@ sumaPrimeros (x : y : xs) = (x+y) : (x : y : xs)
 
 --toma una funcion a->b->c que toma un a y b y retorna un c
 --y retorna otra funcion (b->a->c) que toma un b y un a y retorna un c
-flip :: (a -> b -> c) -> b -> a -> c
-flip f x y  = f y x
+flip1 :: (a -> b -> c) -> b -> a -> c
+flip1 f x y  = f y x
 
 --la lambda recibe 3 parámetros:
 --f   x   y
@@ -183,3 +184,129 @@ rara2 = zipWith (.) [length, sum] [drop 4, take 4]
 -- Por lo que el tipo es [[Int] -> Int]
 
 --head rara2 [1,2,3,4,5] retorna 1 ya que es la cant de elementos de la lista sacandole los 4 primeros
+
+---------------------------Ejercicio 13----------------------------------------
+
+--(a) Utilizando flip, mod, length, map y filter , defina una funcion que
+--dada una lista de enteros retorne la cantidad de elementos pares que
+--tiene la lista.
+--(b) Haga lo mismo, pero sin usar map.
+--(c) Haga lo mismo, pero sin usar flip.
+
+--flip   :: (a -> b -> c) -> b -> a -> c
+--mod    :: a -> Int -> Int
+--length :: [a] -> Int
+--map    :: [a] -> operacion -> [c]
+--filter :: [a] -> condicion -> [c]
+
+par :: Int -> Bool
+par x = x `mod` 2 == 0 
+
+divisiblePrefijo :: Int -> Int -> Bool
+divisiblePrefijo x y = x `mod` y == 0 -- Prefijo
+x `divisible` y = x `mod` y == 0      -- Infijo
+
+--Parte a: Usando todas las funciones
+--Aplico con map la lista me queda con mod 2 aplicado a cada elemento
+--Con filter me quedo con los que tienen resto 0
+--Con length me da cuantos hay
+cantPares1 :: [Int] -> Int
+cantPares1 = length . filter (==0) . map (flip mod 2) 
+
+--Parte b:
+--Con filter ya me quedo con los elementos pares
+cantPares2 :: [Int] -> Int
+cantPares2 = length . filter (flip divisiblePrefijo 2) 
+
+
+--Parte c: 
+--Aplicar map con mod 2, filter con ==0 y length
+cantPares3a :: [Int] -> Int
+cantPares3a xs = length (filter (==0) (map (`mod`2) xs))
+--otra forma:
+cantPares3b = length . filter (==True) . map (`divisible` 2) -- filter (==True) es lo mismo que filter id
+
+
+---------------------------Ejercicio 14----------------------------------------
+
+--La funcion filter se puede definir en terminos de concat y map:
+--filter p = concat . map box
+--where box x = ...
+--Dar la definicion de box .
+
+-- concat recibe una lista de listas y devuelve una sola lista con todos los elementos.
+-- map box tiene que retornar una lista de listas para aplicarle concat
+-- box es una funcion, map hace que se aplique box a cada elemento de la lista
+filter1 p = concat . map box
+    where box x = if p x then [x] else []
+
+
+---------------------------Ejercicio 15----------------------------------------
+
+--Considere el tipo Triangulo definido en el Ejercicio 11 del Practico 1.
+--data Triangulo = Equi Int | Iso Int Int | Esca Int Int Int
+--Defina una funcion isos :: [Triangulo ] → Int, que dada una lista de
+--triangulos retorna la cantidad de ellos que son isosceles. Defina isos usando:
+--(a) listas por comprension.
+--(b) filter
+
+
+data Triangulo = Equi Int | Iso Int Int | Esca Int Int Int
+ deriving (Show, Eq)
+
+esIso :: Triangulo -> Bool
+esIso (Iso n1 n2) = (>0) n1 && (>0) n2 
+esIso _ = False
+
+--Parte a
+isosA :: [Triangulo] -> Int
+isosA xs = length [a | a <- xs, esIso a]
+
+--Parte b
+isosB :: [Triangulo] -> Int
+isosB = length . filter esIso
+
+---------------------------Ejercicio 16----------------------------------------
+
+--Considere la siguiente representacion de matrices de dos dimensiones en
+--terminos de listas de listas:
+--type Matriz a = [[a ]]
+--donde vamos a asumir que todas las filas (dadas por las listas de tipo [a])
+--son del mismo tamano. Por ejemplo,
+--m = [[1, 2, 3], [4, 5, 6]]
+--representa una matriz de 2x3.
+--(a) Usando drop, defina una funcion columna :: Int → Matriz a → [a ]
+--tal que columna i m retorna la i-esima columna de la matriz m.
+--(b) Usando columna, defina una funcion transpose::Matriz a → Matriz a
+--que transpone una matriz.
+--Por ejemplo, transpose m retorna [[1, 4], [2, 5], [3, 6]]
+
+type Matriz a = [[a]]
+    
+obtenerCol :: Int -> [a] ->  a
+obtenerCol i = head . drop (pred i)
+
+columna :: Int -> Matriz a -> [a]
+columna i = map (obtenerCol i) 
+
+cantColumnas :: [[a]] -> Int
+cantColumnas =  length . concat . take 1 
+
+transpose :: Matriz a -> Matriz a 
+--Queria aplicarle a todas las filas de m la funcion columna para ir obteniendo las columnas
+--no podia usar directamente columna porque necesitaba tambien a m como parametro  
+transpose m = flip map [1..cantColumnas m] (\i -> columna i m) 
+
+--Otras formas de escribirlo
+transposeAux1 m = map (\i -> columna i m)  [1..cantColumnas m] --ni siquiera necesitaba flip
+transposeAux2 m = map (flip columna m) [1..cantColumnas m]
+transposeAux3 m = map (`columna` m)  [1..cantColumnas m]
+
+---------------------------Ejercicio 17----------------------------------------
+
+--Explique por que la siguiente definicion no es aceptada por el sistema de
+--tipos de Haskell:
+--dobleAp f = (f True, f ’a’)
+
+--f deberia ser una funcion que tome un bool o un char y eso no es posible
+--ya que haskell f no puede tener dos tipos de entrada distintos al mismo tiempo
