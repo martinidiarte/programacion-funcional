@@ -1,5 +1,5 @@
 import Control.Monad.Trans.Cont (reset)
-
+import Data.List
 ----------------Ejercicio 1--------------------
 
 -- Considere la siguiente definición de los números naturales:
@@ -152,8 +152,8 @@ data OurInt = IntZero | Pos Nat | Neg Nat
     deriving Show
 
 -- Ejemplos:
--- Pos (Succ Zero)   == 1
--- Neg Zero          == -1
+-- Pos (Succ Zero)   == 2 -> Pos (n) = n+1 ->
+-- Neg Zero          == -1 -> Neg (n) = n-1
 
 
 ----------------Ejercicio 2.a--------------------
@@ -161,7 +161,14 @@ data OurInt = IntZero | Pos Nat | Neg Nat
 -- Definir instancia Num para OurInt
 
 instance Num OurInt where
-    (+) = undefined
+    IntZero + n = n
+    (Pos n1) + (Pos n2) = Pos (suma (suma n1 n2) (Succ Zero)) 
+    (Neg n1) + (Neg n2) = Neg (suma (suma n1 n2) (Succ Zero))
+    (Pos Zero) + (Neg Zero) = IntZero
+    (Pos Zero) + (Neg (Succ n)) = Neg n
+    (Pos (Succ n)) + (Neg Zero) = Pos n
+    (Pos (Succ n1)) + (Neg (Succ n2)) = (Pos n1) + (Neg n2)
+    n1 + n2 = n2 + n1
     (*) = undefined
     abs = undefined
     signum = undefined
@@ -196,15 +203,16 @@ data Tree a = Empty | Node (Tree a) a (Tree a)
 -- postorder :: Tree a -> [a]
 
 inorder :: Tree a -> [a]
-inorder = undefined
+inorder Empty = []
+inorder (Node izq raiz der) = inorder izq ++ [raiz] ++ inorder der  
 
 
 preorder :: Tree a -> [a]
-preorder = undefined
-
+preorder Empty = []
+preorder (Node izq raiz der) = [raiz] ++ preorder izq ++ preorder der 
 
 postorder :: Tree a -> [a]
-postorder = undefined
+postorder (Node izq raiz der) = postorder izq ++ postorder der  ++ [raiz]  
 
 
 ----------------Ejercicio 3.b--------------------
@@ -213,8 +221,10 @@ postorder = undefined
 -- Construye un árbol binario de búsqueda
 
 mkTree :: Ord a => [a] -> Tree a
-mkTree = undefined
-
+mkTree = mkTreeAux . sort
+    where 
+        mkTreeAux (x:xs) = Node Empty x (mkTreeAux xs)
+        mkTreeAux [] = Empty
 
 -- Posible función auxiliar:
 -- insertar :: Ord a => a -> Tree a -> Tree a
@@ -228,7 +238,7 @@ insertar = undefined
 -- ¿Qué hace inorder . mkTree ?
 -- Escribir explicación acá:
 
-
+--devuelve la misma lista
 
 ----------------Ejercicio 4--------------------
 
@@ -244,8 +254,10 @@ data BTree a = Leaf a | Fork (BTree a) (BTree a)
 -- Reemplaza cada hoja por su profundidad
 
 depths :: BTree a -> BTree Int
-depths = undefined
-
+depths = depthsAux 0
+    where   
+        depthsAux n (Leaf _) = Leaf n
+        depthsAux n (Fork izq der) =  Fork (depthsAux (n+1) izq) (depthsAux (n+1) der)
 
 ----------------Ejercicio 4.b--------------------
 
@@ -256,11 +268,12 @@ depths = undefined
 -- primero definir size
 
 sizeBTree :: BTree a -> Int
-sizeBTree = undefined
-
+sizeBTree (Leaf _) = 1
+sizeBTree (Fork izq der) = sizeBTree izq + sizeBTree der
 
 balanced :: BTree a -> Bool
-balanced = undefined
+balanced (Leaf _) = True
+balanced (Fork izq der) = abs (sizeBTree izq - sizeBTree der) <= 1 && balanced izq && balanced der
 
 
 ----------------Ejercicio 4.c--------------------
@@ -269,15 +282,17 @@ balanced = undefined
 -- Construye un árbol balanceado a partir de una lista no vacía
 
 mkBTree :: [a] -> BTree a
-mkBTree = undefined
+mkBTree [x] = Leaf x
+mkBTree xs = (Fork (mkBTree l1) (mkBTree l2))
+    where   
+        (l1, l2) = splitMitad xs
 
 
 -- Posible auxiliar:
 -- splitMitad :: [a] -> ([a],[a])
 
 splitMitad :: [a] -> ([a],[a])
-splitMitad = undefined
-
+splitMitad xs = splitAt (length xs `div` 2) xs
 
 ----------------Ejercicio 4.d--------------------
 
@@ -285,7 +300,11 @@ splitMitad = undefined
 -- Retorna el valor de la n-ésima hoja
 
 retrieve :: BTree a -> Int -> a
-retrieve = undefined
+retrieve (Leaf a) 1 = a
+retrieve (Fork izq der) n 
+    | sizeBTree izq >= n = retrieve izq n
+    | otherwise = retrieve der (n- (sizeBTree izq)) 
+ 
 
 
 
