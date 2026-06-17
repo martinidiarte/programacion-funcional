@@ -88,13 +88,13 @@ ppFun (Fun nombre param inst exp) =
     "fun " ++ nombre ++ " "++ param ++" {\n"  
     ++ ppStmts "    " inst
     ++ "} " ++ ppExp exp ++ ";\n"
-    ++"\n"
 
 -- Pretty-printing de un programa PRONTO
 -- El comportamiento de la función se especifica en la letra de la Tarea.
 ppProg :: Prog -> String
 ppProg [] = ""
-ppProg (x:xs) = ppFun x ++ ppProg xs
+ppProg [f] = ppFun f -- Caso de una funcion
+ppProg (x:xs) = ppFun x ++ "\n" ++ ppProg xs
 
 --Para encerrar un programa entre corchetes
 ppProgAux :: Prog -> String

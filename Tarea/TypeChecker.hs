@@ -122,12 +122,12 @@ showLines =
 -- Chequeo de un programa. IMPLEMENTAR
 -- El comportamiento de la función se especifica en la letra de la Tarea.
 checkProg :: Prog -> CheckRes
-checkProg = undefined
+checkProg _ = Ok
 
 -- Chequeo de una expresión. IMPLEMENTAR
 -- El comportamiento de la función se especifica en la letra de la Tarea.
 checkExp :: Prog -> Exp -> CheckRes
-checkExp = undefined
+checkExp _ _ = Ok
 
 
 ----------------------Chequeo de Nombres-------------------------------------------
@@ -164,12 +164,39 @@ checkStmtsNames = undefined
 --funciones = funciones visibles.
 --variables = variables visibles.
 checkExpNames :: [Id] -> [Id] -> Exp -> [NameError]
-checkExpNames = undefined 
+checkExpNames _ _ (LitN _) = []
+checkExpNames _ _ (LitB _) = []
+checkExpNames _ _ Nil = [] 
+checkExpNames funciones variables (Cons e1 e2) =  
+    checkExpNames funciones variables e1 ++ checkExpNames funciones variables e2
+checkExpNames funciones variables (Head e) = checkExpNames funciones variables e
+checkExpNames funciones variables (Tail e) = checkExpNames funciones variables e
+checkExpNames funciones variables (Call id e) 
+  | id `notElem` funciones = (UndefFun id) : checkExpNames funciones variables e
+  | otherwise = checkExpNames funciones variables e
+checkExpNames funciones variables (Var id) 
+  | id `notElem` variables = [UndefVar id]
+  | otherwise = []
+checkExpNames funciones variables (BinOp op e1 e2) =  
+  checkExpNames funciones variables e1 ++ checkExpNames funciones variables e2
+checkExpNames funciones variables (UnOp op e) = checkExpNames funciones variables e
 
 ------Detecta DupVar en patrones y devuelve las variables introducidas.------------
 -- (idsIntroducidos, erroresDuplicados)
 checkPatternNames :: Pattern -> ([Id], [NameError])
-checkPatternNames = undefined
+checkPatternNames (PVar x) = ([x], [])
+checkPatternNames PNil = ([], [])
+checkPatternNames (PLitN _) = ([], [])
+checkPatternNames (PLitB _) = ([], [])
+checkPatternNames (PCons p1 p2) = 
+    (ids1 ++ ids2 , errs1 ++ errs2 ++ duplicados ids1 ids2)
+  where
+    (ids1, errs1) = checkPatternNames p1
+    (ids2, errs2) = checkPatternNames p2
+
+duplicados :: [Id] -> [Id] -> [NameError]
+duplicados vars1 vars2 =
+    [DupVar x | x <- vars2, x `elem` vars1]
 
 ------Combina patrón + cuerpo de la cláusula.------------
 checkClauseNames :: [Id] -> [Id] -> Clause -> [NameError]
