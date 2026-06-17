@@ -1,0 +1,9 @@
+Prueba While:
+putStrLn (ppStmt ""(While (BinOp Lt (Var "x") (LitN 10)) [While (BinOp Lt (Var "y") (LitN 5)) [Assign "y" (BinOp Add (Var "y") (LitN 1))], Assign "x" (BinOp Add (Var "x") (LitN 1))]))
+Prueba If:
+putStrLn (ppStmt ""(If (BinOp Lt (Var "x") (LitN 10)) [If (BinOp Equ (BinOp Mod (Var "x") (LitN 2)) (LitN 0)) [Assign "par" (LitB True)] [Assign "par" (LitB False)]] [Assign "par" (LitB False)]))
+Prueba de Case:
+putStrLn (ppStmt ""(If (BinOp Lt (Var "x") (LitN 10)) [Case (Var "xs") [Clause PNil [Assign "vacia" (LitB True)], Clause (PCons (PVar "y") (PVar "ys")) [Assign "vacia" (LitB False), Assign "primero" (Var "y")]]] [Assign "error" (LitB True)]))
+putStrLn (ppStmt ""(Case (Var "xs") [Clause PNil [Assign "vacia" (LitB True), Assign "largo" (LitN 0)], Clause (PCons (PLitN 1) (PVar "ys")) [Assign "empiezaEnUno" (LitB True), Assign "resto" (Var "ys")], Clause (PCons (PVar "x") (PVar "ys")) [Assign "empiezaEnUno" (LitB False), Assign "primero" (Var "x"), Assign "resto" (Var "ys")]]))
+putStrLn (ppStmt ""(Case (Var "xs") [Clause PNil [Assign "vacia" (LitB True)], Clause (PCons (PVar "x") (PVar "ys")) [While (BinOp Lt (Var "x") (LitN 10)) [Assign "x" (BinOp Add (Var "x") (LitN 1))], Assign "resto" (Var "ys")]]))
+
