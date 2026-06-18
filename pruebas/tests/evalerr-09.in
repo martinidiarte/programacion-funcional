@@ -1,3 +1,0 @@
-50 / 0
-foo (Cons 0 Nil)
-foo (Cons 10 Nil)

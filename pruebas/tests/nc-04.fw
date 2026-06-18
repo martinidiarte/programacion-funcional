@@ -1,5 +1,0 @@
-fun foo xs {
-    case xs of {
-        (Cons x (Cons x ys)) -> { z := x; };
-    };
-} xs;

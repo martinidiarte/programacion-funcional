@@ -1,2 +1,0 @@
-mitail (Nil)
-head (mitail (Cons 9 Nil))

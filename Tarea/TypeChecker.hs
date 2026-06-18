@@ -122,15 +122,19 @@ showLines =
 -- Chequeo de un programa. IMPLEMENTAR
 -- El comportamiento de la función se especifica en la letra de la Tarea.
 checkProg :: Prog -> CheckRes
-checkProg _ = Ok
-
+checkProg p = checkProgNames p
+  
 -- Chequeo de una expresión. IMPLEMENTAR
 -- El comportamiento de la función se especifica en la letra de la Tarea.
 checkExp :: Prog -> Exp -> CheckRes
 checkExp _ _ = Ok
 
-
 ----------------------Chequeo de Nombres-------------------------------------------
+checkProgNames :: Prog -> CheckRes
+checkProgNames p = if null errs then Ok else HasNameErrors errs
+  where
+    errs = checkFunNamesDup p ++ checkFuncionesNames [] p 
+
 --Chequeo que no haya dos funciones con el mismo nombre en el programa (global) 
 checkFunNamesDup :: Prog -> [NameError]
 checkFunNamesDup = aux []
@@ -140,73 +144,138 @@ checkFunNamesDup = aux []
       | f `elem` vistos = DupFun f : aux vistos fs
       | otherwise = aux (f : vistos) fs
 
---------Chequea una función completa ------------
---[Id] = funciones ya declaradas
+--------Chequeo conjunto de funciones----------------------------------------
+--funciones son las funciones alcanzables hasta este momento
+checkFuncionesNames :: [Id] -> Prog -> [NameError]
+checkFuncionesNames _ [] = []
+checkFuncionesNames funciones (f:fs) =  erroresNuevos ++ checkFuncionesNames funcionesNuevas fs
+  where 
+    (funcionesNuevas, erroresNuevos) = checkFunNames [] funciones f
+
+--------Chequea una función completa ------------------------------------
+--Primer [Id]: funciones padre.
+--Segundo [Id]: funciones visibles.
 --Fun = función a revisar
-checkFunNames :: [Id] -> Fun -> [NameError]
-checkFunNames = undefined
+--Retorna funciones acumuladas
+checkFunNames :: [Id] -> [Id] -> Fun -> ([Id], [NameError])
+checkFunNames padres funciones (Fun nombre params insts exp)  = 
+  (nombre : funciones  , errs ++ checkExpNames (nombre : padres) funciones vars exp)  
+  where 
+    (vars, errs) = checkStmtsNames (nombre : padres) funciones [params] insts
 
-------Chequea una instrucción individual ------------
---Primer [Id]: funciones visibles.
---Segundo [Id]: variables visibles.
-checkStmtNames :: [Id] -> [Id] -> Stmt -> [NameError]
-checkStmtNames = undefined
+------Chequea una instrucción individual --------------------------------------------------------------------
+--Solo la asignacion me genera la visibilidad de una variable
+--Primer [Id]: funciones padre.
+--Segundo [Id]: funciones visibles.
+--Tercero [Id]: variables visibles.
+checkStmtNames :: [Id] -> [Id] -> [Id] -> Stmt -> ([Id], [NameError])
+checkStmtNames padres funciones variables (Assign id exp) 
+  | id `notElem` variables = ([id],checkExpNames padres funciones variables exp)
+  | otherwise = ([],checkExpNames padres funciones variables exp)
+checkStmtNames padres funciones variables (While exp insts) = ([], nuevosErrs ++ checkExpNames padres funciones variables exp)
+  where
+    (_, nuevosErrs) = checkStmtsNames padres funciones variables insts
+checkStmtNames padres funciones variables (If exp insts1 insts2) = ([], errsCond ++ errs1 ++ errs2)
+  where
+    (_, errs1) = checkStmtsNames padres funciones variables insts1
+    (_, errs2) = checkStmtsNames padres funciones variables insts2
+    errsCond = checkExpNames padres funciones variables exp
+checkStmtNames padres funciones variables (Case exp clausulas) = 
+  ([],checkExpNames padres funciones variables exp 
+  ++ checkClausesNames padres funciones variables clausulas)
 
------Mantiene actualizado el ambiente de variables------
---Para listas de instrucciones
+-----Mantiene actualizado el ambiente de variables----------------------------------------------
+-- Parametros de entrada:
+-- funciones padre
+-- funciones visibles
+-- variables visibles
+-- conjuntos de instrucciones
+
+-- Parametros de salida:
 -- (nuevasVariablesVisibles, errores)
-checkStmtsNames :: [Id] -> [Id] -> Stmts -> ([Id], [NameError])
-checkStmtsNames = undefined
+checkStmtsNames :: [Id] -> [Id] -> [Id] -> Stmts -> ([Id], [NameError])
+checkStmtsNames _ _ variables [] = (variables, [])
+checkStmtsNames padres funciones variables (i:insts) =(varsFinales, errs1 ++ errs2)
+  where
+    (varsNuevas, errs1) = checkStmtNames padres funciones variables i
+    (varsFinales, errs2) = checkStmtsNames padres funciones (variables ++ varsNuevas) insts
 
-------Detecta UndefVar y UndefFun.------------------------------------
+------Detecta UndefVar y UndefFun.----------------------------------------------------------------------------
 --checkExpNames recibe funciones variables expr y retorna lista de NameError
 -- el caso Call es el que detecta funciones no declaradas.
+--padres = funciones padre.
 --funciones = funciones visibles.
 --variables = variables visibles.
-checkExpNames :: [Id] -> [Id] -> Exp -> [NameError]
-checkExpNames _ _ (LitN _) = []
-checkExpNames _ _ (LitB _) = []
-checkExpNames _ _ Nil = [] 
-checkExpNames funciones variables (Cons e1 e2) =  
-    checkExpNames funciones variables e1 ++ checkExpNames funciones variables e2
-checkExpNames funciones variables (Head e) = checkExpNames funciones variables e
-checkExpNames funciones variables (Tail e) = checkExpNames funciones variables e
-checkExpNames funciones variables (Call id e) 
-  | id `notElem` funciones = (UndefFun id) : checkExpNames funciones variables e
-  | otherwise = checkExpNames funciones variables e
-checkExpNames funciones variables (Var id) 
+checkExpNames :: [Id] -> [Id] -> [Id] -> Exp -> [NameError]
+checkExpNames _ _ _ (LitN _) = []
+checkExpNames _ _ _ (LitB _) = []
+checkExpNames _ _ _ Nil = [] 
+checkExpNames padres funciones variables (Cons e1 e2) =  
+    checkExpNames padres funciones variables e1 ++ checkExpNames padres funciones variables e2
+checkExpNames padres funciones variables (Head e) = checkExpNames padres funciones variables e
+checkExpNames padres funciones variables (Tail e) = checkExpNames padres funciones variables e
+checkExpNames padres funciones variables (Call id e) 
+  | id `notElem` funciones || id `elem` padres = UndefFun id : checkExpNames padres funciones variables e
+  | otherwise = checkExpNames padres funciones variables e
+checkExpNames padres funciones variables (Var id) 
   | id `notElem` variables = [UndefVar id]
   | otherwise = []
-checkExpNames funciones variables (BinOp op e1 e2) =  
-  checkExpNames funciones variables e1 ++ checkExpNames funciones variables e2
-checkExpNames funciones variables (UnOp op e) = checkExpNames funciones variables e
+checkExpNames padres funciones variables (BinOp op e1 e2) =  
+  checkExpNames padres funciones variables e1 ++ checkExpNames padres funciones variables e2
+checkExpNames padres funciones variables (UnOp op e) = checkExpNames padres funciones variables e
 
-------Detecta DupVar en patrones y devuelve las variables introducidas.------------
+------Detecta DupVar en patrones y devuelve las variables introducidas.------------------------------------
 -- (idsIntroducidos, erroresDuplicados)
-checkPatternNames :: Pattern -> ([Id], [NameError])
-checkPatternNames (PVar x) = ([x], [])
-checkPatternNames PNil = ([], [])
-checkPatternNames (PLitN _) = ([], [])
-checkPatternNames (PLitB _) = ([], [])
-checkPatternNames (PCons p1 p2) = 
+checkPatternNames :: [Id] -> Pattern -> ([Id], [NameError])
+checkPatternNames variables (PVar x)  
+  | x `elem` variables = ([], [DupVar x])
+  | otherwise = ([x],[])
+checkPatternNames _ PNil = ([], [])
+checkPatternNames _ (PLitN _) = ([], [])
+checkPatternNames _ (PLitB _) = ([], [])
+checkPatternNames variables (PCons p1 p2) = 
     (ids1 ++ ids2 , errs1 ++ errs2 ++ duplicados ids1 ids2)
   where
-    (ids1, errs1) = checkPatternNames p1
-    (ids2, errs2) = checkPatternNames p2
+    (ids1, errs1) = checkPatternNames variables p1
+    (ids2, errs2) = checkPatternNames variables p2
 
 duplicados :: [Id] -> [Id] -> [NameError]
 duplicados vars1 vars2 =
     [DupVar x | x <- vars2, x `elem` vars1]
 
-------Combina patrón + cuerpo de la cláusula.------------
-checkClauseNames :: [Id] -> [Id] -> Clause -> [NameError]
-checkClauseNames = undefined
+------Combina patrón + cuerpo de la cláusula.------------------------------------------------------------
+-- Parametros:
+-- funciones padre
+-- funciones visibles
+-- variables visibles
+-- y una clausula
+
+--necesito obtener de el patron la lista de variables que usa
+-- y si una de esas esta en variables -> DupVar
+-- snd obtiene el segundo elemento de una tupla 
+checkClauseNames :: [Id] -> [Id] -> [Id] -> Clause -> [NameError]
+checkClauseNames padres funciones variables (Clause pat insts) = patErrAux ++ snd (checkStmtsNames padres funciones (variables ++ vars) insts)
+  where
+    -- obtengo variables introducidas por el patron y los errores detectados
+    (vars, patErrAux) = checkPatternNames variables pat
+    -- si hay variables en el patron que habian sido declaradas DupVar
+    -- y le concateno los errores detectados en el patron
+   
+   -- patErr = duplicados vars variables ++ patErrAux
+
+checkClausesNames :: [Id] -> [Id] -> [Id] -> [Clause] -> [NameError]
+checkClausesNames _ _ _ [] = []
+checkClausesNames padres funciones variables (c:clausulas) = 
+  checkClauseNames padres funciones variables c 
+  ++ checkClausesNames padres funciones variables clausulas
+
+
 
 -- Estructura sugerida por Chatty
 -- El siguiente paso lógico por complejidad sería:
 
--- checkPatternNames
--- checkExpNames
+-- checkPatternNames PRONTO
+-- checkExpNames PRONTO
 -- checkClauseNames
 -- checkStmtNames
 -- checkStmtsNames
