@@ -1,5 +1,6 @@
 {- TAREA DE PROGRAMACIÓN FUNCIONAL 2026 -}
 {- CHEQUEO DE NOMBRES Y TIPOS -}
+{- HLINT ignore "Use foldr" -}
 module TypeChecker where
 
 import AST
@@ -118,18 +119,23 @@ showLines :: Show a => [a] -> ShowS
 showLines =
   foldr1 (\x acc -> x . showChar '\n' . acc) . map shows
 
-
 -- Chequeo de un programa. IMPLEMENTAR Y NO TOCAR LA FIRMA
 -- El comportamiento de la función se especifica en la letra de la Tarea.
+
 checkProg :: Prog -> CheckRes
-checkProg p = checkProgNames p
-  
+checkProg p =
+  case checkProgNames p of
+    Ok -> checkProgTypes p
+    res -> res
+    
 -- Chequeo de una expresión. IMPLEMENTAR Y NO TOCAR LA FIRMA
 -- El comportamiento de la función se especifica en la letra de la Tarea.
 checkExp :: Prog -> Exp -> CheckRes
 checkExp _ _ = Ok
 
-----------------------Chequeo de Nombres-------------------------------------------
+------------------------------------------------------------------------------------------------------------
+---------------------- Chequeo de Nombres ------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------
 checkProgNames :: Prog -> CheckRes
 checkProgNames p = if null errs then Ok else HasNameErrors errs
   where
@@ -175,12 +181,12 @@ checkStmtNames  funciones variables (Case exp clausulas) =
   ([],checkExpNames  funciones variables exp 
   ++ checkClausesNames  funciones variables clausulas)
 
+------Chequea un conjunto de instrucciones --------------------------------------------------------------------
 -----Mantiene actualizado el ambiente de variables----------------------------------------------
 -- Parametros de entrada:
 -- funciones visibles
 -- variables visibles
 -- conjuntos de instrucciones
-
 -- Parametros de salida:
 -- (nuevasVariablesVisibles, errores)
 checkStmtsNames :: [Id] -> [Id] -> Stmts -> ([Id], [NameError])
@@ -190,6 +196,7 @@ checkStmtsNames funciones variables (i:insts) =(varsFinales, errs1 ++ errs2)
     (varsNuevas, errs1) = checkStmtNames  funciones variables i
     (varsFinales, errs2) = checkStmtsNames  funciones (variables ++ varsNuevas) insts
 
+------Chequea una expresion --------------------------------------------------------------------
 ------Detecta UndefVar y UndefFun.----------------------------------------------------------------------------
 --checkExpNames recibe funciones variables expr y retorna lista de NameError
 -- el caso Call es el que detecta funciones no declaradas.
@@ -213,6 +220,7 @@ checkExpNames funciones variables (BinOp op e1 e2) =
   checkExpNames funciones variables e1 ++ checkExpNames  funciones variables e2
 checkExpNames funciones variables (UnOp op e) = checkExpNames  funciones variables e
 
+------Chequea un patron --------------------------------------------------------------------
 ------Detecta DupVar en patrones y devuelve las variables introducidas.------------------------------------
 -- (idsIntroducidos, erroresDuplicados)
 checkPatternNames :: [Id] -> Pattern -> ([Id], [NameError])
@@ -232,12 +240,11 @@ duplicados :: [Id] -> [Id] -> [NameError]
 duplicados vars1 vars2 =
     [DupVar x | x <- vars2, x `elem` vars1]
 
-------Combina patrón + cuerpo de la cláusula.------------------------------------------------------------
+------Chequea una clausula  --------------------------------------------------------------------
 -- Parametros:
 -- funciones visibles
 -- variables visibles
 -- y una clausula
-
 --necesito obtener de el patron la lista de variables que usa
 -- y si una de esas esta en variables -> DupVar
 -- snd obtiene el segundo elemento de una tupla 
@@ -246,27 +253,221 @@ checkClauseNames funciones variables (Clause pat insts) = patErrAux ++ snd (chec
   where
     -- obtengo variables introducidas por el patron y los errores detectados
     (vars, patErrAux) = checkPatternNames variables pat
-    -- si hay variables en el patron que habian sido declaradas DupVar
-    -- y le concateno los errores detectados en el patron
-   
-   -- patErr = duplicados vars variables ++ patErrAux
 
+------Chequea un conjunto de clausulas --------------------------------------------------------------------
 checkClausesNames ::[Id] -> [Id] -> [Clause] -> [NameError]
 checkClausesNames _ _ [] = []
 checkClausesNames funciones variables (c:clausulas) = 
   checkClauseNames funciones variables c 
   ++ checkClausesNames funciones variables clausulas
 
+------------------------------------------------------------------------------------------------------------
+---------------------- Chequeo de Tipos --------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------
+
+--Variables con su tipo
+type Variables = [(Id, Type)]
+
+checkProgTypes :: Prog -> CheckRes
+checkProgTypes p = if null errs then Ok else HasTypeErrors errs
+  where
+    errs = checkFunsTypes p 
+
+checkFunsTypes :: [Fun] -> [TypeError]
+checkFunsTypes [] = []
+checkFunsTypes (x:xs) = checkFunTypes x ++ checkFunsTypes xs
+
+checkFunTypes :: Fun -> [TypeError]
+checkFunTypes (Fun nombre params insts exp)  = errs
+  where
+    (vars, errs2) = checkStmtsTypes [(params, TList)] insts
+    (t1, errs1) = checkExpTypes vars exp
+    errs = errs1 ++ errs2 ++
+      if t1 == TList
+        then []
+      else [WrongReturnType nombre t1]
+
+checkExpTypes :: Variables -> Exp -> (Type, [TypeError])
+checkExpTypes _ (LitN _) = (TInt, [])
+checkExpTypes _ (LitB _) = (TBool, [])
+checkExpTypes _ Nil = (TList, [])
+checkExpTypes variables (Head e) =
+  let (t, errs) = checkExpTypes variables e
+  in if t == TList
+        then (TInt, errs)
+        else (TInt, errs ++ [HeadTailArg t])
+checkExpTypes variables (Tail e) =
+  let (t, errs) = checkExpTypes variables e
+  in if t == TList
+        then (TList, errs)
+        else (TList, errs ++ [HeadTailArg t])
+checkExpTypes variables (Cons e1 e2) =
+  let (t1, errs1) = checkExpTypes variables e1
+      (t2, errs2) = checkExpTypes variables e2
+      errs = errs1 ++ errs2
+  in if t1 == TInt && t2 == TList
+        then (TList, errs)
+        else (TList, errs ++ [ConsExpType t1 t2])
+checkExpTypes variables (Call id e) =
+  let (t,errs) = checkExpTypes variables e
+  in if t == TList
+        then (TList, errs)
+        else (TList, errs ++ [CallArgType id t])
+checkExpTypes variables (Var x) = -- REVISAR ESTA 
+  case lookup x variables of
+    Just t  -> (t, [])
+    --Nothing  -> (TNil, [])
+    Nothing -> error ("Variable no encontrada: " ++ x)
+
+checkExpTypes variables (BinOp op e1 e2) = 
+  let (t1, errs1) = checkExpTypes variables e1
+      (t2, errs2) = checkExpTypes variables e2
+      errs = errs1 ++ errs2
+  in case op of
+    Add ->
+      if t1 == TInt && t2 == TInt
+        then (TInt, errs)
+        else (TInt, errs ++ [BinOpWrongType op t1 t2])
+
+    Sub ->
+      if t1 == TInt && t2 == TInt
+        then (TInt, errs)
+        else (TInt, errs ++ [BinOpWrongType op t1 t2])
+
+    Times ->
+      if t1 == TInt && t2 == TInt
+        then (TInt, errs)
+        else (TInt, errs ++ [BinOpWrongType op t1 t2])
+
+    Div ->
+      if t1 == TInt && t2 == TInt
+        then (TInt, errs)
+        else (TInt, errs ++ [BinOpWrongType op t1 t2])
+
+    Mod ->
+      if t1 == TInt && t2 == TInt
+        then (TInt, errs)
+        else (TInt, errs ++ [BinOpWrongType op t1 t2])
+
+    Lt ->
+      if t1 == TInt && t2 == TInt
+        then (TBool, errs)
+        else (TBool, errs ++ [BinOpWrongType op t1 t2])
+
+    Equ ->
+      if t1 == t2
+        then (TBool, errs)
+        else (TBool, errs ++ [BinOpWrongType op t1 t2])
+    
+    And ->
+      if t1 == TBool && t2 == TBool
+        then (TBool, errs)
+        else (TBool, errs ++ [BinOpWrongType op t1 t2])
+    
+    Or ->
+      if t1 == TBool && t2 == TBool
+        then (TBool, errs)
+        else (TBool, errs ++ [BinOpWrongType op t1 t2])
+checkExpTypes variables (UnOp op e) =
+  let (t, errs) = checkExpTypes variables e
+  in case op of
+    Minus ->
+      if t == TInt
+        then (TInt, errs)
+        else (TInt, errs ++ [UnOpWrongType op t])
+
+    Not ->
+      if t == TBool
+        then (TBool, errs)
+        else (TBool, errs ++ [UnOpWrongType op t])
+
+-- binIntIntInt :: BOp -> Type -> Type -> [TypeError] -> (Type,[TypeError])
+-- binIntIntInt op t1 t2 errs =
+--   if t1 == TInt && t2 == TInt
+--     then (TInt, errs)
+--     else (TInt, errs ++ [BinOpWrongType op t1 t2])
+
+checkClausesTypes :: Variables -> Type -> [Clause] -> (Variables, [TypeError])
+checkClausesTypes vars _ [] = (vars, [])
+checkClausesTypes vars tExp (c:cs) =
+  let (_, errs1) = checkClauseTypes vars tExp c
+      (_, errs2) = checkClausesTypes vars tExp cs
+  in (vars, errs1 ++ errs2)
+
+checkClauseTypes :: Variables -> Type -> Clause -> (Variables, [TypeError])
+checkClauseTypes vars tExp (Clause pat insts) =
+  let (varsPat, errsPat) = checkPatternTypes vars pat tExp
+      (varsStmt, errsStmt) = checkStmtsTypes (vars ++ varsPat) insts
+  in (varsStmt, errsPat ++ errsStmt)
 
 
--- Estructura sugerida por Chatty
--- El siguiente paso lógico por complejidad sería:
+--Nos falta intruducir este error ConsExpType Type Type cuando los patrones del cons no respetan sus tipos
+checkPatternTypes :: Variables -> Pattern -> Type -> (Variables, [TypeError])
+checkPatternTypes vars PNil t
+  | t == TList = (vars, [])
+  | otherwise  = (vars, [PatMismatch t TList])
+checkPatternTypes vars (PLitN _) t
+  | t == TInt = (vars, [])
+  | otherwise = (vars, [PatMismatch t TInt])
+checkPatternTypes vars (PLitB _) t
+  | t == TBool = (vars, [])
+  | otherwise  = (vars, [PatMismatch t TBool])
+checkPatternTypes vars (PCons p1 p2) t
+  | t /= TList = (vars, [PatMismatch t TList])  
+  | otherwise =
+      let (vars1, errs1) = checkPatternTypes vars p1 TInt
+          (vars2, errs2) = checkPatternTypes vars1 p2 TList 
+      in (vars2, errs1 ++ errs2)
+checkPatternTypes vars (PVar x) t = ([(x,t)], []) --Las variables introducidas por un patrón son nuevas.
+  -- case lookup x vars of
+  --   Nothing ->
+  --     ((x,t):vars, [])
+  --   Just tx ->
+  --     if tx == t
+  --        then (vars, [])
+  --        else (vars, [PatMismatch tx t])
 
--- checkPatternNames PRONTO
--- checkExpNames PRONTO
--- checkClauseNames
--- checkStmtNames
--- checkStmtsNames
--- checkFunNames
--- checkProg
+checkStmtsTypes :: Variables -> Stmts -> (Variables, [TypeError])
+checkStmtsTypes variables [] = (variables,[])
+checkStmtsTypes variables (x:xs) = (v2, errs1 ++ errs2)
+  where 
+    (v1, errs1) = checkStmtTypes variables x 
+    (v2, errs2) = checkStmtsTypes v1 xs
+  
+checkStmtTypes :: Variables -> Stmt -> (Variables, [TypeError])
+checkStmtTypes variables (Assign id e) =
+  let (te, errs) = checkExpTypes variables e
+  in case lookup id variables of
+       Nothing ->
+         -- primera asignación
+         ((id, te) : variables, errs)
 
+       Just tid ->
+         if tid == te
+            then (variables, errs)
+          else (variables,
+            errs ++ [AssignTypeMismatch id tid te])
+        
+checkStmtTypes variables (While e insts) =
+  let (t1,errs1) = checkExpTypes variables e
+      (vars,errs2) = checkStmtsTypes variables insts
+      errs = errs1 ++ errs2
+  in if t1 == TBool
+      then (variables, errs)
+      else (variables, errs ++ [CondNotBool t1])
+
+checkStmtTypes variables (If e ins1 ins2) =
+  let (te,errse) = checkExpTypes variables e
+      (vars1,errs1) = checkStmtsTypes variables ins1
+      (vars2,errs2) = checkStmtsTypes variables ins2
+      errs = errse ++ errs1 ++ errs2
+  in if te == TBool
+      then (variables, errs)
+      else (variables, errs ++ [CondNotBool te])
+
+checkStmtTypes variables (Case e cls) = (variables, errse ++ errs1)
+  where 
+    (te,errse) = checkExpTypes variables e
+    (vars, errs1) = checkClausesTypes variables te cls 
+
+    
