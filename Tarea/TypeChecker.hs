@@ -131,7 +131,19 @@ checkProg p =
 -- Chequeo de una expresión. IMPLEMENTAR Y NO TOCAR LA FIRMA
 -- El comportamiento de la función se especifica en la letra de la Tarea.
 checkExp :: Prog -> Exp -> CheckRes
-checkExp _ _ = Ok
+checkExp p e =
+  let funs = [n | Fun n _ _ _ <- p]
+
+      nameErrs =
+        checkExpNames funs [] e
+
+      (_, typeErrs) =
+        checkExpTypes [] e
+  in case (nameErrs, typeErrs) of
+       ([], []) -> Ok
+       (ns, []) -> HasNameErrors ns
+       ([], ts) -> HasTypeErrors ts
+       (ns, ts) -> HasNameErrors ns
 
 ------------------------------------------------------------------------------------------------------------
 ---------------------- Chequeo de Nombres ------------------------------------------------------------------
@@ -282,7 +294,7 @@ checkFunTypes (Fun nombre params insts exp)  = errs
   where
     (vars, errs2) = checkStmtsTypes [(params, TList)] insts
     (t1, errs1) = checkExpTypes vars exp
-    errs = errs1 ++ errs2 ++
+    errs =  errs2 ++ errs1 ++
       if t1 == TList
         then []
       else [WrongReturnType nombre t1]
@@ -316,8 +328,6 @@ checkExpTypes variables (Call id e) =
 checkExpTypes variables (Var x) = -- REVISAR ESTA 
   case lookup x variables of
     Just t  -> (t, [])
-    --Nothing  -> (TNil, [])
-    Nothing -> error ("Variable no encontrada: " ++ x)
 
 checkExpTypes variables (BinOp op e1 e2) = 
   let (t1, errs1) = checkExpTypes variables e1
@@ -328,42 +338,34 @@ checkExpTypes variables (BinOp op e1 e2) =
       if t1 == TInt && t2 == TInt
         then (TInt, errs)
         else (TInt, errs ++ [BinOpWrongType op t1 t2])
-
     Sub ->
       if t1 == TInt && t2 == TInt
         then (TInt, errs)
         else (TInt, errs ++ [BinOpWrongType op t1 t2])
-
     Times ->
       if t1 == TInt && t2 == TInt
         then (TInt, errs)
         else (TInt, errs ++ [BinOpWrongType op t1 t2])
-
     Div ->
       if t1 == TInt && t2 == TInt
         then (TInt, errs)
         else (TInt, errs ++ [BinOpWrongType op t1 t2])
-
     Mod ->
       if t1 == TInt && t2 == TInt
         then (TInt, errs)
         else (TInt, errs ++ [BinOpWrongType op t1 t2])
-
     Lt ->
       if t1 == TInt && t2 == TInt
         then (TBool, errs)
         else (TBool, errs ++ [BinOpWrongType op t1 t2])
-
     Equ ->
       if t1 == t2
         then (TBool, errs)
-        else (TBool, errs ++ [BinOpWrongType op t1 t2])
-    
+        else (TBool, errs ++ [BinOpWrongType op t1 t2])    
     And ->
       if t1 == TBool && t2 == TBool
         then (TBool, errs)
         else (TBool, errs ++ [BinOpWrongType op t1 t2])
-    
     Or ->
       if t1 == TBool && t2 == TBool
         then (TBool, errs)
@@ -375,17 +377,10 @@ checkExpTypes variables (UnOp op e) =
       if t == TInt
         then (TInt, errs)
         else (TInt, errs ++ [UnOpWrongType op t])
-
     Not ->
       if t == TBool
         then (TBool, errs)
         else (TBool, errs ++ [UnOpWrongType op t])
-
--- binIntIntInt :: BOp -> Type -> Type -> [TypeError] -> (Type,[TypeError])
--- binIntIntInt op t1 t2 errs =
---   if t1 == TInt && t2 == TInt
---     then (TInt, errs)
---     else (TInt, errs ++ [BinOpWrongType op t1 t2])
 
 checkClausesTypes :: Variables -> Type -> [Clause] -> (Variables, [TypeError])
 checkClausesTypes vars _ [] = (vars, [])
@@ -396,36 +391,29 @@ checkClausesTypes vars tExp (c:cs) =
 
 checkClauseTypes :: Variables -> Type -> Clause -> (Variables, [TypeError])
 checkClauseTypes vars tExp (Clause pat insts) =
-  let (varsPat, errsPat) = checkPatternTypes vars pat tExp
+  let (_,varsPat, errsPat) = checkPatternTypes vars pat tExp
       (varsStmt, errsStmt) = checkStmtsTypes (vars ++ varsPat) insts
   in (varsStmt, errsPat ++ errsStmt)
 
 
 --Nos falta intruducir este error ConsExpType Type Type cuando los patrones del cons no respetan sus tipos
-checkPatternTypes :: Variables -> Pattern -> Type -> (Variables, [TypeError])
-checkPatternTypes vars PNil t
-  | t == TList = (vars, [])
-  | otherwise  = (vars, [PatMismatch t TList])
-checkPatternTypes vars (PLitN _) t
-  | t == TInt = (vars, [])
-  | otherwise = (vars, [PatMismatch t TInt])
-checkPatternTypes vars (PLitB _) t
-  | t == TBool = (vars, [])
-  | otherwise  = (vars, [PatMismatch t TBool])
-checkPatternTypes vars (PCons p1 p2) t
-  | t /= TList = (vars, [PatMismatch t TList])  
-  | otherwise =
-      let (vars1, errs1) = checkPatternTypes vars p1 TInt
-          (vars2, errs2) = checkPatternTypes vars1 p2 TList 
-      in (vars2, errs1 ++ errs2)
-checkPatternTypes vars (PVar x) t = ([(x,t)], []) --Las variables introducidas por un patrón son nuevas.
-  -- case lookup x vars of
-  --   Nothing ->
-  --     ((x,t):vars, [])
-  --   Just tx ->
-  --     if tx == t
-  --        then (vars, [])
-  --        else (vars, [PatMismatch tx t])
+checkPatternTypes :: Variables -> Pattern -> Type -> (Type, Variables, [TypeError])
+checkPatternTypes vars PNil t = (TList, vars, if  t == TList then [] else [PatMismatch t TList])
+checkPatternTypes vars (PLitN _) t = (TInt, vars, if  t == TInt then [] else [PatMismatch t TInt])
+checkPatternTypes vars (PLitB _) t = (TBool, vars, if t == TBool then [] else [PatMismatch t TBool])
+checkPatternTypes vars (PCons p1 p2) t =
+  let (t1, vars1, errs1) = checkPatternTypes vars p1 TInt
+      (t2, vars2, errs2) = checkPatternTypes vars1 p2 TList
+      errsCons =
+        if t1 == TInt && t2 == TList
+           then []
+           else [ConsExpType t1 t2]
+      errsPat =
+        if t == TList
+           then []
+           else [PatMismatch t TList]
+  in (TList, vars2, errs2 ++ errsCons ++ errsPat) --Saque el errs1 de la concatenacion de errores: errs1 ++
+checkPatternTypes vars (PVar x) t = (t, (x,t):vars, []) --Las variables introducidas por un patrón son nuevas.
 
 checkStmtsTypes :: Variables -> Stmts -> (Variables, [TypeError])
 checkStmtsTypes variables [] = (variables,[])
@@ -446,28 +434,23 @@ checkStmtTypes variables (Assign id e) =
          if tid == te
             then (variables, errs)
           else (variables,
-            errs ++ [AssignTypeMismatch id tid te])
-        
+            errs ++ [AssignTypeMismatch id tid te])     
 checkStmtTypes variables (While e insts) =
   let (t1,errs1) = checkExpTypes variables e
       (vars,errs2) = checkStmtsTypes variables insts
       errs = errs1 ++ errs2
   in if t1 == TBool
       then (variables, errs)
-      else (variables, errs ++ [CondNotBool t1])
-
+      else (variables, errs1 ++ [CondNotBool t1] ++ errs2)
 checkStmtTypes variables (If e ins1 ins2) =
   let (te,errse) = checkExpTypes variables e
       (vars1,errs1) = checkStmtsTypes variables ins1
       (vars2,errs2) = checkStmtsTypes variables ins2
-      errs = errse ++ errs1 ++ errs2
   in if te == TBool
-      then (variables, errs)
-      else (variables, errs ++ [CondNotBool te])
-
+      then (variables, errse ++ errs1 ++ errs2)
+      else (variables, errse ++ [CondNotBool te] ++ errs1 ++ errs2)
 checkStmtTypes variables (Case e cls) = (variables, errse ++ errs1)
   where 
     (te,errse) = checkExpTypes variables e
     (vars, errs1) = checkClausesTypes variables te cls 
 
-    
